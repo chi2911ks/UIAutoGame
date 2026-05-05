@@ -5,9 +5,11 @@ A PyQt5 desktop application for managing Android devices, selecting missions, an
 ![Application UI](screenshot/app.png)
 
 Thêm các nhiệm vụ ở đây
+
 ![Add Mission](screenshot/mission.png)
 
 Thêm các func chạy ở đây
+
 ![Run Mission](screenshot/run_mission.png)
 
 ## Chức năng chính
