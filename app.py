@@ -1,3 +1,4 @@
+
 import os
 import re
 import logging
@@ -12,9 +13,14 @@ from PyQt5.QtGui import QIcon
 from adbutils import adb
 from gui_helper.table_view import TableViewHelper
 from gui.mainwindow_ui import Ui_MainWindow
+from mission import Mission
 from utils.json_handle import JSONHandler
+from worker import Worker
 os.makedirs("logs", exist_ok=True)
 os.makedirs("data", exist_ok=True)
+
+
+
 
 class QtPlainTextEditHandler(logging.Handler):
     def __init__(self, widget):
@@ -93,7 +99,7 @@ class App(QMainWindow):
         self.main_widget.setupUi(self)
         self.show()
     def initLogging(self):
-        self.logger = logging.getLogger("KhanKhan")
+        self.logger = logging.getLogger("AutoGameLogger")
         self.logger.setLevel(logging.DEBUG)
         self.logger.propagate = False
         if not self.logger.handlers:
@@ -121,21 +127,32 @@ class App(QMainWindow):
     
     def initMissionArea(self):
         self.checkBoxes = {}
-        missions = ["[NV] LV12", "[NV] LV13", "[NV] LV14", "[NV] LV15", "[NV] LV16", "[NV] LV17", "[NV] LV18", "[NV] LV19", "[NV] LV20"]
-        for mission in missions:
-            mission_widget, checkbox = self.create_mission_widget(mission)
+        for mission in Mission:
+            mission_widget, checkbox = self.create_mission_widget(mission.value)
             self.checkBoxes[mission] = checkbox
             self.main_widget.verticalLayout_2.addWidget(mission_widget)
         self.main_widget.selectAllCb.stateChanged.connect(self.on_select_all_changed)
         spacerItem = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
         self.main_widget.verticalLayout_2.addItem(spacerItem)
-        self.log(f"Mission area initialized with {len(missions)} missions.")
+        self.log(f"Mission area initialized with {len(Mission)} missions.")
+    def getMissions(self):
+        """
+        The function `getMissions` retrieves the text of all missions from a dictionary of
+        checkboxes and returns them as a list.
+        :return: A list of all missions.
+        """
+        missions = []
+        for name, cb in self.checkBoxes.items():
+            if cb.isChecked():
+                missions.append(name)
+        return missions
+        
     def on_select_all_changed(self, state):
         for checkbox in self.checkBoxes.values():
             checkbox.blockSignals(True)
             checkbox.setChecked(state == Qt.Checked)
             checkbox.blockSignals(False)
-        self.check_box_state_changed(False)
+        self.check_box_state_changed(True if state == Qt.Checked else False)
     def create_mission_widget(self, mission_name):
         mission_widget = QWidget()
         mission_layout = QHBoxLayout(mission_widget)
@@ -149,13 +166,18 @@ class App(QMainWindow):
         mission_layout.addWidget(checkbox)
         mission_layout.addStretch()
         return mission_widget, checkbox
-    def check_box_state_changed(self, _):
+    def check_box_state_changed(self, state):
         all_checked = sum(cb.isChecked() for cb in self.checkBoxes.values())
         self.main_widget.label_mission_selected.setText(f"Số nhiệm vụ đã chọn: {all_checked}")
+        if state == Qt.Checked:
+            self.log(f"Device restart mission(s).")
+            self.restartThread()
 
     def on_data_changed(self, topLeft: QModelIndex, bottomRight: QModelIndex, roles):
         if Qt.CheckStateRole in roles:
             self.main_widget.label_devices_selected.setText(f"Đã chọn: {len(self.get_devices_checked())}")
+            
+            
     def refresh_devices(self):
         """
         The `refresh_devices` function clears existing rows in a model, retrieves a list of devices,
@@ -181,13 +203,53 @@ class App(QMainWindow):
             item = self.table_helper.model.item(row, 0)
             devices.append(item.text())
         return devices
-
+    def get_serial(self, row):
+        item = self.table_helper.model.item(row, 0)
+        return item.text() if item else None
     @pyqtSlot()
     def on_loadDevicesBtn_clicked(self):
         self.refresh_devices()
         self.main_widget.label_devices_selected.setText("Đã chọn: 0")
         self.log("Load devices button clicked.")
     
+    @pyqtSlot()
+    def on_startBtn_clicked(self):
+        selected_devices = self.get_devices_checked()
+        if not selected_devices:
+            QMessageBox.warning(self, "Chưa chọn thiết bị", "Vui lòng chọn ít nhất một thiết bị để bắt đầu.")
+            return
+        selected_missions = [name for name, cb in self.checkBoxes.items() if cb.isChecked()]
+        if not selected_missions:
+            QMessageBox.warning(self, "Chưa chọn nhiệm vụ", "Vui lòng chọn ít nhất một nhiệm vụ để bắt đầu.")
+            return
+        
+        if self.main_widget.startBtn.text() == "START":
+            self.log(f"Start with {len(selected_devices)} device(s) and {len(selected_missions)} mission(s) selected.")
+            self.main_widget.startBtn.setText("STOP")
+            self.startThread()
+            
+        else:
+            self.log("Stopping worker thread.")
+            self.main_widget.startBtn.setText("START")
+            if hasattr(self, 'worker'):
+                self.worker.stop()
+    def startThread(self):
+        self.worker = Worker(app=self)
+        self.worker.logs.connect(self.log)
+        self.worker.show_status.connect(lambda row, status: self.table_helper.set_item_text(row, 1, status))
+        self.worker.start()
+    def restartThread(self):
+        if hasattr(self, 'worker'):
+            self.worker.stop()
+        self.startThread()
+    @pyqtSlot()
+    def on_pauseBtn_clicked(self):
+        if self.main_widget.pauseBtn.text() == "PAUSE":
+            self.main_widget.pauseBtn.setText("RESUME")
+            self.worker.pause()
+        else:
+            self.main_widget.pauseBtn.setText("PAUSE")
+            self.worker.resume()
 
 if __name__ == "__main__":
     import sys

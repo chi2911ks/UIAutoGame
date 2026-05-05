@@ -245,6 +245,9 @@ font: 8pt &quot;Verdana&quot;;</string>
              <property name="text">
               <string>Save TK</string>
              </property>
+             <property name="checked">
+              <bool>true</bool>
+             </property>
             </widget>
            </item>
            <item>
@@ -300,12 +303,24 @@ font: 8pt &quot;Verdana&quot;;</string>
              <property name="text">
               <string>START</string>
              </property>
+             <property name="checkable">
+              <bool>false</bool>
+             </property>
+             <property name="checked">
+              <bool>false</bool>
+             </property>
             </widget>
            </item>
            <item>
             <widget class="QPushButton" name="pauseBtn">
              <property name="text">
               <string>PAUSE</string>
+             </property>
+             <property name="checkable">
+              <bool>false</bool>
+             </property>
+             <property name="checked">
+              <bool>false</bool>
              </property>
             </widget>
            </item>
