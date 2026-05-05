@@ -2,11 +2,12 @@
 import os
 import re
 import logging
+from collections import defaultdict
 
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QHeaderView, QPushButton, QComboBox, QMenu, QFileDialog, QMessageBox, QDialog, QGroupBox, QLineEdit)
-from PyQt5.QtWidgets import QMainWindow, QApplication, QFileDialog, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox, QLabel, QComboBox, QMessageBox, QDialog, QPlainTextEdit, QRadioButton, QWidget, QListView, QHBoxLayout, QSpacerItem, QSizePolicy
+from PyQt5.QtWidgets import QMainWindow, QApplication, QFileDialog, QLineEdit, QCheckBox, QSpinBox, QDoubleSpinBox, QLabel, QComboBox, QMessageBox, QDialog, QPlainTextEdit, QRadioButton, QWidget, QListView, QHBoxLayout, QVBoxLayout, QSpacerItem, QSizePolicy
 from PyQt5.QtCore import (
-    Qt, QAbstractTableModel, QModelIndex, pyqtSignal
+    Qt, QAbstractTableModel, QModelIndex, pyqtSignal, QSize
 )
 from PyQt5.QtCore import Qt, pyqtSlot, QEventLoop, QTimer, QItemSelectionModel, QSemaphore
 from PyQt5.QtGui import QIcon
@@ -38,9 +39,10 @@ class QtPlainTextEditHandler(logging.Handler):
 class App(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.device_logs = defaultdict(list)
+        
         self.initUI()
         self.initLogging()
-        
         self.initSettings()
         self.initTable()
         self.initMissionArea()
@@ -97,6 +99,7 @@ class App(QMainWindow):
     def initUI(self):
         self.main_widget = Ui_MainWindow()
         self.main_widget.setupUi(self)
+        self.main_widget.runAllCb.stateChanged.connect(self.on_run_all_changed)
         self.show()
     def initLogging(self):
         self.logger = logging.getLogger("AutoGameLogger")
@@ -110,18 +113,29 @@ class App(QMainWindow):
 
             gui_handler = QtPlainTextEditHandler(self.main_widget.logs)
             gui_handler.setLevel(logging.INFO)
-            gui_handler.setFormatter(logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", "%H:%M:%S"))
+            
+            gui_handler.setFormatter(logging.Formatter("%(message)s"))
             self.logger.addHandler(gui_handler)
-
-        self.logger.info("Logging initialized")
-
     def log(self, message, level=logging.INFO):
         if hasattr(self, 'logger'):
             self.logger.log(level, message)
+        self._store_device_log(message)
+
+    def _store_device_log(self, message):
+        match = re.match(r'^\[([^\]]+)\]\s*(.*)$', message)
+        if match:
+            serial = match.group(1)
+            self.device_logs[serial].append(message)
+        else:
+            self.device_logs["GLOBAL"].append(message)
 
     def initTable(self):
-        self.table_helper = TableViewHelper(["Devices", "Status"], self.main_widget.devicesTable)
+        self.table_helper = TableViewHelper(["Devices", "Status", "Log"], self.main_widget.devicesTable)
         self.model = self.table_helper.model
+        
+        self.main_widget.devicesTable.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.main_widget.devicesTable.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
+        self.main_widget.devicesTable.setColumnWidth(2, 40)
         self.refresh_devices()
         self.model.dataChanged.connect(self.on_data_changed)
     
@@ -146,7 +160,15 @@ class App(QMainWindow):
             if cb.isChecked():
                 missions.append(name)
         return missions
-        
+    def on_run_all_changed(self, state):
+        for row in range(self.table_helper.model.rowCount()):
+            item = self.table_helper.model.item(row, 0)
+            item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
+        if state == Qt.Checked:
+            self.on_startBtn_clicked()
+        else:
+            if hasattr(self, 'worker'):
+                self.worker.stop()
     def on_select_all_changed(self, state):
         for checkbox in self.checkBoxes.values():
             checkbox.blockSignals(True)
@@ -183,14 +205,17 @@ class App(QMainWindow):
         The `refresh_devices` function clears existing rows in a model, retrieves a list of devices,
         updates a label with the total number of devices, and populates a table with device information.
         """
+        self.device_logs.clear()
         self.model.removeRows(0, self.model.rowCount())
         devices = self.get_devices()
         self.main_widget.label_total_devices.setText(f"Tổng số thiết bị: {len(devices)}")
         for device in devices:
             row = self.table_helper.insert_row()
             self.table_helper.set_item_text(row, 0, device)
+            self._set_row_log_button(row, device)
         self.log(f"Refreshed devices list: {len(devices)} device(s) found.")
     def get_devices(self):
+        return ["emulator-555%s" % i for i in range(10)]
         return [i.serial for i in adb.device_list()]
     def get_devices_checked(self):
         """
@@ -206,6 +231,47 @@ class App(QMainWindow):
     def get_serial(self, row):
         item = self.table_helper.model.item(row, 0)
         return item.text() if item else None
+
+    def show_device_log_dialog(self, serial):
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Log thiết bị {serial}")
+        dialog.resize(700, 400)
+
+        layout = QVBoxLayout(dialog)
+        log_view = QPlainTextEdit(dialog)
+        log_view.setReadOnly(True)
+        log_view.setPlainText("\n".join(self.device_logs.get(serial, ["Không có log cho thiết bị này."])))
+        layout.addWidget(log_view)
+
+        dialog.exec_()
+
+    def _set_row_log_button(self, row, serial):
+        button = QPushButton("")
+        button.setFlat(True)
+        button.setStyleSheet("border: none; background: transparent;")
+
+        icon_path = os.path.join(os.path.dirname(__file__), "icons", "log.svg")
+        button.setIcon(QIcon(icon_path))
+        button.setIconSize(QSize(18, 18))
+
+        button.setToolTip("Xem log thiết bị")
+        button.clicked.connect(lambda checked, s=serial: self.show_device_log_dialog(s))
+        self.main_widget.devicesTable.setIndexWidget(self.model.index(row, 2), button)
+
+    @pyqtSlot()
+    def on_deviceLogBtn_clicked(self):
+        selected = self.main_widget.devicesTable.selectionModel().selectedRows()
+        if not selected:
+            QMessageBox.warning(self, "Chưa chọn thiết bị", "Vui lòng chọn một thiết bị để xem log.")
+            return
+        if len(selected) > 1:
+            QMessageBox.warning(self, "Chọn một thiết bị", "Vui lòng chỉ chọn một thiết bị để xem log.")
+            return
+        row = selected[0].row()
+        serial = self.get_serial(row)
+        if serial:
+            self.show_device_log_dialog(serial)
+
     @pyqtSlot()
     def on_loadDevicesBtn_clicked(self):
         self.refresh_devices()
@@ -225,19 +291,26 @@ class App(QMainWindow):
         
         if self.main_widget.startBtn.text() == "START":
             self.log(f"Start with {len(selected_devices)} device(s) and {len(selected_missions)} mission(s) selected.")
-            self.main_widget.startBtn.setText("STOP")
             self.startThread()
             
         else:
             self.log("Stopping worker thread.")
-            self.main_widget.startBtn.setText("START")
             if hasattr(self, 'worker'):
+                self.main_widget.startBtn.setEnabled(False)
                 self.worker.stop()
+            else:
+                self.main_widget.startBtn.setText("START")
     def startThread(self):
+        self.main_widget.startBtn.setText("STOP")
         self.worker = Worker(app=self)
         self.worker.logs.connect(self.log)
         self.worker.show_status.connect(lambda row, status: self.table_helper.set_item_text(row, 1, status))
+        self.worker.finished.connect(self.finished)
         self.worker.start()
+    def finished(self):
+        self.main_widget.startBtn.setEnabled(True)
+        self.log("Worker thread finished.")
+        self.main_widget.startBtn.setText("START")
     def restartThread(self):
         if hasattr(self, 'worker'):
             self.worker.stop()
@@ -250,7 +323,31 @@ class App(QMainWindow):
         else:
             self.main_widget.pauseBtn.setText("PAUSE")
             self.worker.resume()
-
+    @pyqtSlot()
+    def on_resizeBtn_clicked(self):
+        width, height = self.main_widget.widthPhone.text(), self.main_widget.heightPhone.text()
+        int_width, int_height = None, None
+        try:
+            int_width = int(width)
+            int_height = int(height)
+        except ValueError:
+            QMessageBox.warning(self, "Invalid input", "Please enter valid integers for width and height.")
+            return
+        print("Resize button clicked with width:", int_width, "and height:", int_height)
+    @pyqtSlot()
+    def on_loadDataBtn_clicked(self):
+        options = QFileDialog.Options()
+        fileName, _ = QFileDialog.getOpenFileName(self,"Load Data File", "","JSON Files (*.json);;All Files (*)", options=options)
+        if fileName:
+            self.log(f"Loading data from {fileName}")
+            try:
+                with open(fileName, 'r', encoding='utf-8') as f:
+                    data = f.read()
+                    self.log("Data loaded successfully.")
+            except Exception as e:
+                self.log(f"Error loading data: {e}", level=logging.ERROR)
+                QMessageBox.critical(self, "Error", f"Failed to load data: {e}")
+        
 if __name__ == "__main__":
     import sys
     app = QApplication(sys.argv)

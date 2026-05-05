@@ -1,6 +1,7 @@
 
 
 import ctypes
+from random import randint
 from threading import Thread, Semaphore
 from time import sleep, time
 from PyQt5.QtCore import QThread, pyqtSignal
@@ -23,26 +24,26 @@ class ThreadedWorker(Thread):
         missions = self.get_missions_func()
         for mission in missions:
             if mission == Mission.NV_LV12:
-                self.log_callback(f"Starting {mission.value} on device {serial}")
-                self.show_status_callback(row, f"Starting {mission.value}")
-                sleep(5)  # Simulate work
-                self.log_callback(f"Finished {mission.value} on device {serial}")
-                self.show_status_callback(row, f"Finished {mission.value}")
+                self.log_callback(f"[{serial}] Starting {mission.value}")
+                self.show_status_callback(row, f"[{serial}] Starting {mission.value}")
+                sleep(randint(5, 15))  # Simulate work
+                self.log_callback(f"[{serial}] Finished {mission.value}")
+                self.show_status_callback(row, f"[{serial}] Finished {mission.value}")
             elif mission == Mission.NV_LV13:
-                self.log_callback(f"Starting {mission.value} on device {serial}")
-                self.show_status_callback(row, f"Starting {mission.value}")
-                sleep(10)  # Simulate work
-                self.log_callback(f"Finished {mission.value} on device {serial}")
-                self.show_status_callback(row, f"Finished {mission.value}")
+                self.log_callback(f"[{serial}] Starting {mission.value}")
+                self.show_status_callback(row, f"[{serial}] Starting {mission.value}")
+                sleep(randint(5, 15))  # Simulate work
+                self.log_callback(f"[{serial}] Finished {mission.value}")
+                self.show_status_callback(row, f"[{serial}] Finished {mission.value}")
             else:
-                self.log_callback(f"Starting {mission.value} on device {serial}")
-                self.show_status_callback(row, f"Starting {mission.value}")
-                sleep(1)  # Simulate work
-                self.log_callback(f"Finished {mission.value} on device {serial}")
-                self.show_status_callback(row, f"Finished {mission.value}")
-        
-        self.log_callback(f"Finished work on device {serial}")
-        self.show_status_callback(row, f"Finished device {serial}")
+                self.log_callback(f"[{serial}] Starting {mission.value}")
+                self.show_status_callback(row, f"[{serial}] Starting {mission.value}")
+                sleep(randint(5, 15))  # Simulate work
+                self.log_callback(f"[{serial}] Finished {mission.value}")
+                self.show_status_callback(row, f"[{serial}] Finished {mission.value}")
+
+        self.log_callback(f"[{serial}] Done!")
+        self.show_status_callback(row, "Done!")
     def run(self):
         while not self.rows_queue.empty():
             self.row = self.rows_queue.get()
