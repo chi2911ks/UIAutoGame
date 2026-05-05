@@ -2,7 +2,13 @@
 
 A PyQt5 desktop application for managing Android devices, selecting missions, and tracking per-device execution and logs.
 
-![Application UI](readme_screenshot.png)
+![Application UI](screenshot/app.png)
+
+Thêm các nhiệm vụ ở đây
+![Add Mission](screenshot/mission.png)
+
+Thêm các func chạy ở đây
+![Run Mission](screenshot/run_mission.png)
 
 ## Chức năng chính
 
