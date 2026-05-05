@@ -40,6 +40,7 @@ class App(QMainWindow):
     def __init__(self):
         super().__init__()
         self.device_logs = defaultdict(list)
+        self.run_all_changing = False
         
         self.initUI()
         self.initLogging()
@@ -160,15 +161,22 @@ class App(QMainWindow):
             if cb.isChecked():
                 missions.append(name)
         return missions
+    @pyqtSlot(int)
     def on_run_all_changed(self, state):
-        for row in range(self.table_helper.model.rowCount()):
-            item = self.table_helper.model.item(row, 0)
-            item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
+        print("Run all state changed:", state)
         if state == Qt.Checked:
-            self.on_startBtn_clicked()
+            for row in range(self.table_helper.model.rowCount()):
+                item = self.table_helper.model.item(row, 0)
+                item.setCheckState(Qt.Checked)
+            if self.startThread():
+                self.log("Run all started.")
+            else:
+                self.log("Failed to start run all.")
+                for row in range(self.table_helper.model.rowCount()):
+                    item = self.table_helper.model.item(row, 0)
+                    item.setCheckState(Qt.Unchecked)
         else:
-            if hasattr(self, 'worker'):
-                self.worker.stop()
+            self.stopThread()
     def on_select_all_changed(self, state):
         for checkbox in self.checkBoxes.values():
             checkbox.blockSignals(True)
@@ -191,7 +199,7 @@ class App(QMainWindow):
     def check_box_state_changed(self, state):
         all_checked = sum(cb.isChecked() for cb in self.checkBoxes.values())
         self.main_widget.label_mission_selected.setText(f"Số nhiệm vụ đã chọn: {all_checked}")
-        if state == Qt.Checked:
+        if state == Qt.Unchecked and hasattr(self, 'worker') and self.worker.isRunning():
             self.log(f"Device restart mission(s).")
             self.restartThread()
 
@@ -205,7 +213,11 @@ class App(QMainWindow):
         The `refresh_devices` function clears existing rows in a model, retrieves a list of devices,
         updates a label with the total number of devices, and populates a table with device information.
         """
-        self.device_logs.clear()
+        # self.device_logs.clear()
+        if hasattr(self, 'worker') and self.worker.isRunning():
+            self.log("Cannot refresh devices while worker is running.", level=logging.WARNING)
+            QMessageBox.warning(self, "Worker đang chạy", "Không thể làm mới danh sách thiết bị khi worker đang chạy. Vui lòng dừng worker trước khi làm mới.")
+            return
         self.model.removeRows(0, self.model.rowCount())
         devices = self.get_devices()
         self.main_widget.label_total_devices.setText(f"Tổng số thiết bị: {len(devices)}")
@@ -280,6 +292,23 @@ class App(QMainWindow):
     
     @pyqtSlot()
     def on_startBtn_clicked(self):
+        if self.main_widget.startBtn.text() == "START":
+            if self.checkFirstRun():
+                self.startThread()
+        else:
+            self.stopThread()
+    
+    def stopThread(self):
+        self.log("Stopping worker thread.")
+        if hasattr(self, 'worker'):
+            if self.worker.isRunning():
+                self.main_widget.startBtn.setEnabled(False)
+                self.worker.stop()
+            else:
+                self.main_widget.startBtn.setText("START")
+        else:
+            self.main_widget.startBtn.setText("START")
+    def checkFirstRun(self):
         selected_devices = self.get_devices_checked()
         if not selected_devices:
             QMessageBox.warning(self, "Chưa chọn thiết bị", "Vui lòng chọn ít nhất một thiết bị để bắt đầu.")
@@ -288,18 +317,7 @@ class App(QMainWindow):
         if not selected_missions:
             QMessageBox.warning(self, "Chưa chọn nhiệm vụ", "Vui lòng chọn ít nhất một nhiệm vụ để bắt đầu.")
             return
-        
-        if self.main_widget.startBtn.text() == "START":
-            self.log(f"Start with {len(selected_devices)} device(s) and {len(selected_missions)} mission(s) selected.")
-            self.startThread()
-            
-        else:
-            self.log("Stopping worker thread.")
-            if hasattr(self, 'worker'):
-                self.main_widget.startBtn.setEnabled(False)
-                self.worker.stop()
-            else:
-                self.main_widget.startBtn.setText("START")
+        return True
     def startThread(self):
         self.main_widget.startBtn.setText("STOP")
         self.worker = Worker(app=self)
@@ -307,6 +325,7 @@ class App(QMainWindow):
         self.worker.show_status.connect(lambda row, status: self.table_helper.set_item_text(row, 1, status))
         self.worker.finished.connect(self.finished)
         self.worker.start()
+        return self.worker
     def finished(self):
         self.main_widget.startBtn.setEnabled(True)
         self.log("Worker thread finished.")

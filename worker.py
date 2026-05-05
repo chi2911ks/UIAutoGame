@@ -19,30 +19,32 @@ class ThreadedWorker(Thread):
         self.get_missions_func = get_missions_func
         self.log_callback = log_callback
         self.show_status_callback = show_status_callback
+    def log(self, message):
+        self.log_callback(f"[{self.serial}] {message}")
     def work(self, row):
-        serial = self.get_serial_func(row)
+        self.serial = self.get_serial_func(row)
         missions = self.get_missions_func()
         for mission in missions:
             if mission == Mission.NV_LV12:
-                self.log_callback(f"[{serial}] Starting {mission.value}")
-                self.show_status_callback(row, f"[{serial}] Starting {mission.value}")
+                self.log(f"Starting {mission.value}")
+                self.show_status_callback(row, f"Starting {mission.value}")
                 sleep(randint(5, 15))  # Simulate work
-                self.log_callback(f"[{serial}] Finished {mission.value}")
-                self.show_status_callback(row, f"[{serial}] Finished {mission.value}")
+                self.log(f"Finished {mission.value}")
+                self.show_status_callback(row, f"Finished {mission.value}")
             elif mission == Mission.NV_LV13:
-                self.log_callback(f"[{serial}] Starting {mission.value}")
-                self.show_status_callback(row, f"[{serial}] Starting {mission.value}")
+                self.log(f"Starting {mission.value}")
+                self.show_status_callback(row, f"Starting {mission.value}")
                 sleep(randint(5, 15))  # Simulate work
-                self.log_callback(f"[{serial}] Finished {mission.value}")
-                self.show_status_callback(row, f"[{serial}] Finished {mission.value}")
+                self.log(f"Finished {mission.value}")
+                self.show_status_callback(row, f"Finished {mission.value}")
             else:
-                self.log_callback(f"[{serial}] Starting {mission.value}")
-                self.show_status_callback(row, f"[{serial}] Starting {mission.value}")
+                self.log(f"Starting {mission.value}")
+                self.show_status_callback(row, f"Starting {mission.value}")
                 sleep(randint(5, 15))  # Simulate work
-                self.log_callback(f"[{serial}] Finished {mission.value}")
-                self.show_status_callback(row, f"[{serial}] Finished {mission.value}")
+                self.log(f"Finished {mission.value}")
+                self.show_status_callback(row, f"Finished {mission.value}")
 
-        self.log_callback(f"[{serial}] Done!")
+        self.log(f"[{self.serial}] Done!")
         self.show_status_callback(row, "Done!")
     def run(self):
         while not self.rows_queue.empty():
@@ -92,6 +94,7 @@ class Worker(QThread):
     def __init__(self, app):
         super().__init__()
         self.app = app
+    
     def run(self):
         """
         The `run` function creates multiple worker threads to process devices in parallel and waits for
