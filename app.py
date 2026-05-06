@@ -228,7 +228,7 @@ class App(QMainWindow):
             self._set_row_log_button(row, device)
         self.log(f"Refreshed devices list: {len(devices)} device(s) found.")
     def get_devices(self):
-        return ["emulator-555%s" % i for i in range(10)]
+        # return ["emulator-555%s" % i for i in range(10)]
         return [i.serial for i in adb.device_list()]
     def get_devices_checked(self):
         """
