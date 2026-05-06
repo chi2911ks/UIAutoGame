@@ -21,31 +21,38 @@ class ThreadedWorker(Thread):
         self.show_status_callback = show_status_callback
     def log(self, message):
         self.log_callback(f"[{self.serial}] {message}")
+    def show_status(self, status):
+        self.show_status_callback(self.row, status)
     def work(self, row):
         self.serial = self.get_serial_func(row)
         missions = self.get_missions_func()
-        for mission in missions:
-            if mission == Mission.NV_LV12:
-                self.log(f"Starting {mission.value}")
-                self.show_status_callback(row, f"Starting {mission.value}")
-                sleep(randint(5, 15))  # Simulate work
-                self.log(f"Finished {mission.value}")
-                self.show_status_callback(row, f"Finished {mission.value}")
-            elif mission == Mission.NV_LV13:
-                self.log(f"Starting {mission.value}")
-                self.show_status_callback(row, f"Starting {mission.value}")
-                sleep(randint(5, 15))  # Simulate work
-                self.log(f"Finished {mission.value}")
-                self.show_status_callback(row, f"Finished {mission.value}")
-            else:
-                self.log(f"Starting {mission.value}")
-                self.show_status_callback(row, f"Starting {mission.value}")
-                sleep(randint(5, 15))  # Simulate work
-                self.log(f"Finished {mission.value}")
-                self.show_status_callback(row, f"Finished {mission.value}")
+        counter = 0
+        while True:
+            self.log(f"Starting account {counter + 1}...")
+            self.show_status(f"Starting account {counter + 1}...")
+            for mission in missions:
+                if mission == Mission.NV_LV12: #thêm các func chạy của bạn vào đây
+                    self.log(f"Starting {mission.value}")
+                    self.show_status(f"Starting {mission.value}")
+                    sleep(randint(5, 15))  # Simulate work
+                    self.log(f"Finished {mission.value}")
+                    self.show_status(f"Finished {mission.value}")
+                elif mission == Mission.NV_LV13: #thêm các func chạy của bạn vào đây
+                    self.log(f"Starting {mission.value}")
+                    self.show_status(f"Starting {mission.value}")
+                    sleep(randint(5, 15))  # Simulate work
+                    self.log(f"Finished {mission.value}")
+                    self.show_status(f"Finished {mission.value}")
+                else:
+                    self.log(f"Starting {mission.value}")
+                    self.show_status(f"Starting {mission.value}")
+                    sleep(randint(5, 15))  # Simulate work
+                    self.log(f"Finished {mission.value}")
+                    self.show_status(f"Finished {mission.value}")
 
-        self.log(f"[{self.serial}] Done!")
-        self.show_status_callback(row, "Done!")
+            self.log(f"Account {counter + 1} done!")
+            self.show_status(f"Account {counter + 1} done!")
+            counter += 1
     def run(self):
         while not self.rows_queue.empty():
             self.row = self.rows_queue.get()
@@ -105,8 +112,7 @@ class Worker(QThread):
         rows = self.app.table_helper.get_checked_rows()
         for row in rows:
             self.rows_queue.put(row)
-        threadCount = self.app.main_widget.threadCount.value()
-        for _ in range(min(threadCount, len(rows))):
+        for _ in range(len(rows)):
             worker = ThreadedWorker(self.rows_queue, 
                                     self.app.get_serial, 
                                     self.app.getMissions,

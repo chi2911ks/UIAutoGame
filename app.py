@@ -101,6 +101,7 @@ class App(QMainWindow):
         self.main_widget = Ui_MainWindow()
         self.main_widget.setupUi(self)
         self.main_widget.runAllCb.stateChanged.connect(self.on_run_all_changed)
+        self.main_widget.showPhoneCb.stateChanged.connect(self.on_show_phone_changed)
         self.show()
     def initLogging(self):
         self.logger = logging.getLogger("AutoGameLogger")
@@ -227,7 +228,7 @@ class App(QMainWindow):
             self._set_row_log_button(row, device)
         self.log(f"Refreshed devices list: {len(devices)} device(s) found.")
     def get_devices(self):
-        # return ["emulator-555%s" % i for i in range(10)]
+        return ["emulator-555%s" % i for i in range(10)]
         return [i.serial for i in adb.device_list()]
     def get_devices_checked(self):
         """
@@ -356,7 +357,7 @@ class App(QMainWindow):
     @pyqtSlot()
     def on_loadDataBtn_clicked(self):
         options = QFileDialog.Options()
-        fileName, _ = QFileDialog.getOpenFileName(self,"Load Data File", "","JSON Files (*.json);;All Files (*)", options=options)
+        fileName, _ = QFileDialog.getOpenFileName(self,"Load Data File", "","Text Files (*.txt);;All Files (*)", options=options)
         if fileName:
             self.log(f"Loading data from {fileName}")
             try:
@@ -366,7 +367,11 @@ class App(QMainWindow):
             except Exception as e:
                 self.log(f"Error loading data: {e}", level=logging.ERROR)
                 QMessageBox.critical(self, "Error", f"Failed to load data: {e}")
-        
+    def on_show_phone_changed(self, state):
+        if state == Qt.Checked:
+            print("Show phone checkbox checked")
+        else:
+            print("Show phone checkbox unchecked")
 if __name__ == "__main__":
     import sys
     app = QApplication(sys.argv)
