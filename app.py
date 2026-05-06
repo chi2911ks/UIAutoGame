@@ -151,9 +151,9 @@ class App(QMainWindow):
         spacerItem = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding)
         self.main_widget.verticalLayout_2.addItem(spacerItem)
         self.log(f"Mission area initialized with {len(Mission)} missions.")
-    def getMissions(self):
+    def get_selected_missions(self):
         """
-        The function `getMissions` retrieves the text of all missions from a dictionary of
+        The function `get_selected_missions` retrieves the text of all missions from a dictionary of
         checkboxes and returns them as a list.
         :return: A list of all missions.
         """

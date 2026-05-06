@@ -12,51 +12,52 @@ THREAD_SUSPEND_RESUME = 0x0002
 THREAD_QUERY_INFORMATION = 0x0040
 
 class ThreadedWorker(Thread):
-    def __init__(self, rows_queue: Queue, get_serial_func, get_missions_func, log_callback, show_status_callback):
+    
+    def __init__(
+        self, 
+        row,  
+        serial, 
+        account,
+        missions, 
+        log_callback, 
+        show_status_callback
+    ):
         super().__init__()
-        self.rows_queue = rows_queue
-        self.get_serial_func = get_serial_func
-        self.get_missions_func = get_missions_func
+        self.row = row
+        self.serial = serial
+        self.account = account
+        self.missions = missions
         self.log_callback = log_callback
         self.show_status_callback = show_status_callback
     def log(self, message):
         self.log_callback(f"[{self.serial}] {message}")
     def show_status(self, status):
         self.show_status_callback(self.row, status)
-    def work(self, row):
-        self.serial = self.get_serial_func(row)
-        missions = self.get_missions_func()
-        counter = 0
-        while True:
-            self.log(f"Starting account {counter + 1}...")
-            self.show_status(f"Starting account {counter + 1}...")
-            for mission in missions:
-                if mission == Mission.NV_LV12: #thêm các func chạy của bạn vào đây
-                    self.log(f"Starting {mission.value}")
-                    self.show_status(f"Starting {mission.value}")
-                    sleep(randint(5, 15))  # Simulate work
-                    self.log(f"Finished {mission.value}")
-                    self.show_status(f"Finished {mission.value}")
-                elif mission == Mission.NV_LV13: #thêm các func chạy của bạn vào đây
-                    self.log(f"Starting {mission.value}")
-                    self.show_status(f"Starting {mission.value}")
-                    sleep(randint(5, 15))  # Simulate work
-                    self.log(f"Finished {mission.value}")
-                    self.show_status(f"Finished {mission.value}")
-                else:
-                    self.log(f"Starting {mission.value}")
-                    self.show_status(f"Starting {mission.value}")
-                    sleep(randint(5, 15))  # Simulate work
-                    self.log(f"Finished {mission.value}")
-                    self.show_status(f"Finished {mission.value}")
-
-            self.log(f"Account {counter + 1} done!")
-            self.show_status(f"Account {counter + 1} done!")
-            counter += 1
     def run(self):
-        while not self.rows_queue.empty():
-            self.row = self.rows_queue.get()
-            self.work(self.row)
+        self.log(f"Starting account {self.account}...")
+        self.show_status(f"Starting account {self.account}...")
+        for mission in self.missions:
+            if mission == Mission.NV_LV12: #thêm các func chạy của bạn vào đây
+                self.log(f"Starting {mission.value}")
+                self.show_status(f"Starting {mission.value}")
+                sleep(randint(5, 15))  # Simulate work
+                self.log(f"Finished {mission.value}")
+                self.show_status(f"Finished {mission.value}")
+            elif mission == Mission.NV_LV13: #thêm các func chạy của bạn vào đây
+                self.log(f"Starting {mission.value}")
+                self.show_status(f"Starting {mission.value}")
+                sleep(randint(5, 15))  # Simulate work
+                self.log(f"Finished {mission.value}")
+                self.show_status(f"Finished {mission.value}")
+            else:
+                self.log(f"Starting {mission.value}")
+                self.show_status(f"Starting {mission.value}")
+                sleep(randint(5, 15))  # Simulate work
+                self.log(f"Finished {mission.value}")
+                self.show_status(f"Finished {mission.value}")
+
+        self.log(f"Account {self.account} done!")
+        self.show_status(f"Account {self.account} done!")
 
     def stop(self):
         if hasattr(self, 'row'):
@@ -101,6 +102,27 @@ class Worker(QThread):
     def __init__(self, app):
         super().__init__()
         self.app = app
+        self.stop_flag = False
+        self.current_workers = {}
+    
+    
+    def __thread(self, row, serial, missions):
+        counter = 0
+        while not self.stop_flag:
+            self.logs.emit(f"Starting new thread for {serial} (account {counter + 1})")
+            worker = ThreadedWorker(
+                row=row, 
+                serial=serial, 
+                account=counter + 1,
+                missions=missions,
+                log_callback=self.logs.emit, 
+                show_status_callback=self.show_status.emit
+            )
+            self.current_workers[row] = worker
+            worker.start()
+            worker.join()
+            self.current_workers[row] = None
+            counter += 1
     
     def run(self):
         """
@@ -108,33 +130,69 @@ class Worker(QThread):
         all threads to finish before printing a message.
         """
         self.listThread = []
-        self.rows_queue = Queue()
         rows = self.app.table_helper.get_checked_rows()
         for row in rows:
-            self.rows_queue.put(row)
-        for _ in range(len(rows)):
-            worker = ThreadedWorker(self.rows_queue, 
-                                    self.app.get_serial, 
-                                    self.app.getMissions,
-                                    self.logs.emit, 
-                                    self.show_status.emit)
-            worker.start()
-            self.listThread.append(worker)
-        for worker in self.listThread:
-            worker.join()
-        
+            thread = Thread(target=self.__thread, args=(
+                row, 
+                self.app.get_serial(row), 
+                self.app.get_selected_missions()
+            ))
+            thread.start()
+            self.listThread.append(thread)
+
+        for thread in self.listThread:
+            thread.join()
+
         print("All worker threads completed.")
     def stop(self):
-        for worker in getattr(self, 'listThread', []):
-            worker.stop()
-        for worker in getattr(self, 'listThread', []):
-            worker.join(timeout=0.1)
+        self.stop_flag = True
+        for row, worker in self.current_workers.items():
+            if worker:
+                worker.stop()
+        for thread in getattr(self, 'listThread', []):
+            self._async_raise(thread, SystemExit)
+        for thread in getattr(self, 'listThread', []):
+            thread.join(timeout=0.1)
 
     def pause(self):
-        for worker in getattr(self, 'listThread', []):
-            worker.pause()
+        for row, worker in self.current_workers.items():
+            if worker:
+                worker.pause()
+        for thread in getattr(self, 'listThread', []):
+            self._suspend_thread(thread)
 
     def resume(self):
-        for worker in getattr(self, 'listThread', []):
-            worker.resume()
+        for row, worker in self.current_workers.items():
+            if worker:
+                worker.resume()
+        for thread in getattr(self, 'listThread', []):
+            self._resume_thread(thread)
+
+    def _async_raise(self, thread, exctype):
+        if not thread.is_alive() or thread.ident is None:
+            return
+        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(thread.ident), ctypes.py_object(exctype))
+        if res == 0:
+            raise ValueError("Invalid thread id")
+        elif res > 1:
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_ulong(thread.ident), None)
+            raise SystemError("PyThreadState_SetAsyncExc failed")
+
+    def _suspend_thread(self, thread):
+        if thread.ident is None:
+            return
+        thread_handle = ctypes.windll.kernel32.OpenThread(THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION, False, ctypes.c_ulong(thread.ident))
+        if not thread_handle:
+            return
+        ctypes.windll.kernel32.SuspendThread(thread_handle)
+        ctypes.windll.kernel32.CloseHandle(thread_handle)
+
+    def _resume_thread(self, thread):
+        if thread.ident is None:
+            return
+        thread_handle = ctypes.windll.kernel32.OpenThread(THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION, False, ctypes.c_ulong(thread.ident))
+        if not thread_handle:
+            return
+        ctypes.windll.kernel32.ResumeThread(thread_handle)
+        ctypes.windll.kernel32.CloseHandle(thread_handle)
             
