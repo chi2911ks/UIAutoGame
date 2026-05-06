@@ -8,6 +8,8 @@ from PyQt5.QtCore import QThread, pyqtSignal
 from queue import Queue
 
 from mission import Mission
+from mission_worker import MissionWorker
+import mission_worker
 THREAD_SUSPEND_RESUME = 0x0002
 THREAD_QUERY_INFORMATION = 0x0040
 
@@ -34,28 +36,14 @@ class ThreadedWorker(Thread):
     def show_status(self, status):
         self.show_status_callback(self.row, status)
     def run(self):
-        self.log(f"Starting account {self.account}...")
-        self.show_status(f"Starting account {self.account}...")
-        for mission in self.missions:
-            if mission == Mission.NV_LV12: #thêm các func chạy của bạn vào đây
-                self.log(f"Starting {mission.value}")
-                self.show_status(f"Starting {mission.value}")
-                sleep(randint(5, 15))  # Simulate work
-                self.log(f"Finished {mission.value}")
-                self.show_status(f"Finished {mission.value}")
-            elif mission == Mission.NV_LV13: #thêm các func chạy của bạn vào đây
-                self.log(f"Starting {mission.value}")
-                self.show_status(f"Starting {mission.value}")
-                sleep(randint(5, 15))  # Simulate work
-                self.log(f"Finished {mission.value}")
-                self.show_status(f"Finished {mission.value}")
-            else:
-                self.log(f"Starting {mission.value}")
-                self.show_status(f"Starting {mission.value}")
-                sleep(randint(5, 15))  # Simulate work
-                self.log(f"Finished {mission.value}")
-                self.show_status(f"Finished {mission.value}")
-
+        mission_worker = MissionWorker(
+            missions=self.missions,
+            serial=self.serial,
+            log_signal=self.log,
+            show_status_signal=self.show_status
+        )
+        mission_worker.login(self.account)
+        mission_worker.run_missions()
         self.log(f"Account {self.account} done!")
         self.show_status(f"Account {self.account} done!")
 
